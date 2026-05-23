@@ -4,7 +4,7 @@ use crate::error::Error;
 use crate::requests::{EnergyDataInterval, PowerDataInterval, ScheduleRule};
 use crate::responses::{
     CurrentPowerResult, DeviceInfoPlugEnergyMonitoringResult, DeviceUsageEnergyMonitoringResult,
-    EnergyDataResult, EnergyUsageResult, PowerDataResult, Timer,
+    EnergyDataResult, EnergyUsageResult, NextEvent, PowerDataResult, Timer,
 };
 
 tapo_handler! {
@@ -92,5 +92,12 @@ impl PlugEnergyMonitoringHandler {
     /// Removes every schedule rule from the device.
     pub async fn remove_all_schedule_rules(&self) -> Result<(), Error> {
         self.client.read().await.remove_all_schedule_rules().await
+    }
+
+    /// Returns the next event the device is scheduled to act on
+    /// (typically the soonest-firing schedule rule), or `None` if no
+    /// rule is currently armed to fire.
+    pub async fn get_next_event(&self) -> Result<Option<NextEvent>, Error> {
+        self.client.read().await.get_next_event().await
     }
 }

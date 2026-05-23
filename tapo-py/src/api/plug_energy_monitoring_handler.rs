@@ -7,7 +7,7 @@ use tapo::PlugEnergyMonitoringHandler;
 use tapo::requests::{EnergyDataInterval, PowerDataInterval, ScheduleRule};
 use tapo::responses::{
     CurrentPowerResult, DeviceInfoPlugEnergyMonitoringResult, DeviceUsageEnergyMonitoringResult,
-    EnergyDataResult, EnergyUsageResult, PowerDataResult, Timer,
+    EnergyDataResult, EnergyUsageResult, NextEvent, PowerDataResult, Timer,
 };
 
 use crate::call_handler_method;
@@ -157,6 +157,14 @@ impl PyPlugEnergyMonitoringHandler {
         call_handler_method!(
             handler.read().await.deref(),
             PlugEnergyMonitoringHandler::remove_all_schedule_rules
+        )
+    }
+
+    pub async fn get_next_event(&self) -> PyResult<Option<NextEvent>> {
+        let handler = self.inner.clone();
+        call_handler_method!(
+            handler.read().await.deref(),
+            PlugEnergyMonitoringHandler::get_next_event
         )
     }
 }

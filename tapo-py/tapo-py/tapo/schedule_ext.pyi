@@ -1,6 +1,7 @@
-from typing import List, Protocol
+from typing import List, Optional, Protocol
 
 from tapo.requests import ScheduleRule
+from tapo.responses import NextEvent
 
 class ScheduleExt(Protocol):
     """Extension class for the plug's schedule rules (the "Schedule"
@@ -26,3 +27,10 @@ class ScheduleExt(Protocol):
 
     async def remove_all_schedule_rules(self) -> None:
         """Removes every schedule rule from the device."""
+
+    async def get_next_event(self) -> Optional[NextEvent]:
+        """Returns the next event the device is scheduled to act on
+        (typically the soonest-firing schedule rule), or ``None`` if no
+        rule is currently armed to fire.  Useful for surfacing the
+        device-computed sunrise / sunset firing time for sun-relative
+        schedule rules."""

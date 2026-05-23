@@ -19,7 +19,7 @@ use tapo::responses::{
     DeviceInfoLightResult, DeviceInfoPlugEnergyMonitoringResult, DeviceInfoPlugResult,
     DeviceInfoPowerStripResult, DeviceInfoRgbLightStripResult, DeviceInfoRgbicLightStripResult,
     DeviceUsageEnergyMonitoringResult, DeviceUsageResult, EnergyDataIntervalResult,
-    EnergyDataResult, EnergyUsageResult, KE100Result, OtherResult, OvercurrentStatus,
+    EnergyDataResult, EnergyUsageResult, KE100Result, NextEvent, OtherResult, OvercurrentStatus,
     OverheatStatus, PlugState, PowerDataIntervalResult, PowerDataResult, PowerProtectionStatus,
     PowerStripPlugEnergyMonitoringResult, PowerStripPlugResult, Preset, RgbLightStripState,
     RgbicLightStripState, RtspStreamUrl, S200Log, S200Result, S200RotationParams, S210Result,
@@ -195,6 +195,7 @@ fn register_responses(module: &Bound<'_, PyModule>) -> Result<(), PyErr> {
     module.add_class::<DefaultPlugState>()?;
     module.add_class::<DeviceInfoPlugEnergyMonitoringResult>()?;
     module.add_class::<DeviceInfoPlugResult>()?;
+    module.add_class::<NextEvent>()?;
     module.add_class::<PlugState>()?;
     module.add_class::<Timer>()?;
 

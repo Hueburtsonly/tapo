@@ -60,6 +60,7 @@ pub(crate) enum TapoRequest {
     EditScheduleRule(TapoParams<ScheduleRule>),
     GetScheduleRules(TapoParams<GetScheduleRulesParams>),
     RemoveScheduleRules(TapoParams<RemoveScheduleRulesParams>),
+    GetNextEvent(TapoParams<EmptyMap>),
 }
 
 #[derive(Debug, Serialize)]

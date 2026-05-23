@@ -4,7 +4,7 @@ use std::time::Duration;
 use pyo3::prelude::*;
 use tapo::PlugHandler;
 use tapo::requests::ScheduleRule;
-use tapo::responses::{DeviceInfoPlugResult, DeviceUsageResult, Timer};
+use tapo::responses::{DeviceInfoPlugResult, DeviceUsageResult, NextEvent, Timer};
 
 use crate::call_handler_method;
 
@@ -80,5 +80,10 @@ impl PyPlugHandler {
             handler.read().await.deref(),
             PlugHandler::remove_all_schedule_rules
         )
+    }
+
+    pub async fn get_next_event(&self) -> PyResult<Option<NextEvent>> {
+        let handler = self.inner.clone();
+        call_handler_method!(handler.read().await.deref(), PlugHandler::get_next_event)
     }
 }

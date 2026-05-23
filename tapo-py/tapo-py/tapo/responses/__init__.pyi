@@ -8,6 +8,7 @@ from .device_usage_energy_monitoring_result import *
 from .device_usage_result import *
 from .energy_data_result import *
 from .energy_usage_result import *
+from .next_event import *
 from .power_data_result import *
 from .preset import *
 from .rtsp_stream_url import *

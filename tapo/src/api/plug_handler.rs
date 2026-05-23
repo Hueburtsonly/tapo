@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use crate::error::Error;
 use crate::requests::ScheduleRule;
-use crate::responses::{DeviceInfoPlugResult, DeviceUsageResult, Timer};
+use crate::responses::{DeviceInfoPlugResult, DeviceUsageResult, NextEvent, Timer};
 
 tapo_handler! {
     /// Handler for the [P100](https://www.tapo.com/en/search/?q=P100) and
@@ -62,5 +62,12 @@ impl PlugHandler {
     /// Removes every schedule rule from the device.
     pub async fn remove_all_schedule_rules(&self) -> Result<(), Error> {
         self.client.read().await.remove_all_schedule_rules().await
+    }
+
+    /// Returns the next event the device is scheduled to act on
+    /// (typically the soonest-firing schedule rule), or `None` if no
+    /// rule is currently armed to fire.
+    pub async fn get_next_event(&self) -> Result<Option<NextEvent>, Error> {
+        self.client.read().await.get_next_event().await
     }
 }

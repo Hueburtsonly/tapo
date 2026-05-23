@@ -18,9 +18,9 @@ use crate::requests::{
 };
 use crate::responses::{
     AddTimerResult, ControlChildResult, CurrentPowerResult, DecodableResultExt, EnergyDataResult,
-    EnergyDataResultRaw, EnergyUsageResult, PowerDataResult, PowerDataResultRaw,
-    ScheduleRuleAddResult, ScheduleRuleListResult, TapoMultipleResponse, TapoResponseExt,
-    TapoResult, Timer, TimerListResult, validate_response,
+    EnergyDataResultRaw, EnergyUsageResult, NextEvent, PowerDataResult, PowerDataResultRaw,
+    RawNextEvent, ScheduleRuleAddResult, ScheduleRuleListResult, TapoMultipleResponse,
+    TapoResponseExt, TapoResult, Timer, TimerListResult, validate_response,
 };
 #[cfg(feature = "debug")]
 use crate::responses::{
@@ -1359,6 +1359,12 @@ impl ApiClient {
             .execute_request::<serde_json::Value>(request)
             .await?;
         Ok(())
+    }
+
+    pub(crate) async fn get_next_event(&self) -> Result<Option<NextEvent>, Error> {
+        let request = TapoRequest::GetNextEvent(TapoParams::new(EmptyMap {}));
+        let raw: Option<RawNextEvent> = self.protocol()?.execute_request(request).await?;
+        Ok(raw.and_then(|r| r.into_next_event()))
     }
 
     fn protocol_mut(&mut self) -> Result<&mut TapoProtocol, Error> {
