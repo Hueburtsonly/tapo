@@ -17,6 +17,7 @@ import os
 
 from tapo import ApiClient
 from tapo.requests import MON, WED, WEEKDAYS, EVERY_DAY, ScheduleRule
+from tapo.responses import PowerState
 
 
 async def main():
@@ -36,13 +37,15 @@ async def main():
     log.info("Adding four demo rules...")
     added = [
         # Turn on once, the next time the clock hits 06:30.
-        await device.add_schedule_rule(ScheduleRule.clock_once(6, 30, True)),
+        await device.add_schedule_rule(ScheduleRule.clock_once(6, 30, PowerState.On)),
         # Turn off weekly at 23:30 on Mondays and Wednesdays.
-        await device.add_schedule_rule(ScheduleRule.clock_weekly(23, 30, MON | WED, False)),
+        await device.add_schedule_rule(
+            ScheduleRule.clock_weekly(23, 30, MON | WED, PowerState.Off)
+        ),
         # Turn on every day, one hour after sunset.
-        await device.add_schedule_rule(ScheduleRule.sunset_weekly(60, EVERY_DAY, True)),
+        await device.add_schedule_rule(ScheduleRule.sunset_weekly(60, EVERY_DAY, PowerState.On)),
         # Turn off on weekdays (Mon–Fri), 30 minutes before sunrise.
-        await device.add_schedule_rule(ScheduleRule.sunrise_weekly(-30, WEEKDAYS, False)),
+        await device.add_schedule_rule(ScheduleRule.sunrise_weekly(-30, WEEKDAYS, PowerState.Off)),
     ]
     added_ids = [r.id for r in added if r.id]
     log.info("  added ids: %s", added_ids)
@@ -54,13 +57,13 @@ async def main():
     sunset = rules_by_id[sunset_id]
     log.info(
         "Read back sunset rule: id=%s time_kind=%s freq=%s "
-        "offset_minutes=%d week_day=%s turn_on=%s",
+        "offset_minutes=%d week_day=%s desired_state=%s",
         sunset.id,
         sunset.time_kind,
         sunset.frequency,
         sunset.offset_minutes,
         f"0b{sunset.week_day:07b}",
-        sunset.turn_on,
+        sunset.desired_state,
     )
 
     log.info("Cleaning up: removing the four demo rules.")

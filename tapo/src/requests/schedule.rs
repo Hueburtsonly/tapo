@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::error::Error;
+use crate::responses::PowerState;
 
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
@@ -77,7 +78,7 @@ pub mod week_day {
 /// `year=1970, month=1, day=1` still fires at the requested HH:MM.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "python", pyclass(from_py_object, frozen, get_all))]
-#[serde(try_from = "WireRule", into = "WireRule")]
+#[serde(try_from = "ScheduleRuleRaw", into = "ScheduleRuleRaw")]
 pub struct ScheduleRule {
     /// Device-assigned id.  `None` when the rule was constructed
     /// locally; `Some` when read back from the device.
@@ -100,8 +101,8 @@ pub struct ScheduleRule {
     /// Bitmask of days the rule fires on, when `frequency == Weekly`.
     /// Bit 0 = Sunday, bit 6 = Saturday.  See [`week_day`].
     pub week_day: u8,
-    /// When the rule fires, turn the plug on (`true`) or off (`false`).
-    pub turn_on: bool,
+    /// The state the plug transitions to when the rule fires.
+    pub desired_state: PowerState,
 }
 
 impl ScheduleRule {
@@ -110,7 +111,7 @@ impl ScheduleRule {
         minute: u8,
         frequency: ScheduleFrequency,
         week_day: u8,
-        turn_on: bool,
+        desired_state: PowerState,
     ) -> Result<Self, Error> {
         if hour >= 24 {
             return Err(Error::Validation {
@@ -133,7 +134,7 @@ impl ScheduleRule {
             offset_minutes: 0,
             frequency,
             week_day,
-            turn_on,
+            desired_state,
         })
     }
 
@@ -142,7 +143,7 @@ impl ScheduleRule {
         offset_minutes: i16,
         frequency: ScheduleFrequency,
         week_day: u8,
-        turn_on: bool,
+        desired_state: PowerState,
     ) -> Result<Self, Error> {
         if offset_minutes.unsigned_abs() > 1440 {
             return Err(Error::Validation {
@@ -161,7 +162,7 @@ impl ScheduleRule {
             offset_minutes,
             frequency,
             week_day,
-            turn_on,
+            desired_state,
         })
     }
 
@@ -169,41 +170,56 @@ impl ScheduleRule {
     ///
     /// Returns `Err(Error::Validation)` if `hour >= 24`, `minute >= 60`,
     /// or `week_day` has bits 7+ set.
-    pub fn clock_weekly(hour: u8, minute: u8, week_day: u8, turn_on: bool) -> Result<Self, Error> {
-        Self::clock(hour, minute, ScheduleFrequency::Weekly, week_day, turn_on)
+    pub fn clock_weekly(
+        hour: u8,
+        minute: u8,
+        week_day: u8,
+        desired_state: PowerState,
+    ) -> Result<Self, Error> {
+        Self::clock(
+            hour,
+            minute,
+            ScheduleFrequency::Weekly,
+            week_day,
+            desired_state,
+        )
     }
 
     /// Fires once, the next time the device's wall clock reaches `hour:minute`.
     ///
     /// Returns `Err(Error::Validation)` if `hour >= 24` or `minute >= 60`.
-    pub fn clock_once(hour: u8, minute: u8, turn_on: bool) -> Result<Self, Error> {
-        Self::clock(hour, minute, ScheduleFrequency::Once, 0, turn_on)
+    pub fn clock_once(hour: u8, minute: u8, desired_state: PowerState) -> Result<Self, Error> {
+        Self::clock(hour, minute, ScheduleFrequency::Once, 0, desired_state)
     }
 
     /// Fires every day matched by `week_day` at `offset_minutes` from sunrise.
     ///
     /// Returns `Err(Error::Validation)` if `offset_minutes` is outside
     /// ±1440 or `week_day` has bits 7+ set.
-    pub fn sunrise_weekly(offset_minutes: i16, week_day: u8, turn_on: bool) -> Result<Self, Error> {
+    pub fn sunrise_weekly(
+        offset_minutes: i16,
+        week_day: u8,
+        desired_state: PowerState,
+    ) -> Result<Self, Error> {
         Self::sun(
             ScheduleTimeKind::Sunrise,
             offset_minutes,
             ScheduleFrequency::Weekly,
             week_day,
-            turn_on,
+            desired_state,
         )
     }
 
     /// Fires once at the next sunrise plus `offset_minutes`.
     ///
     /// Returns `Err(Error::Validation)` if `offset_minutes` is outside ±1440.
-    pub fn sunrise_once(offset_minutes: i16, turn_on: bool) -> Result<Self, Error> {
+    pub fn sunrise_once(offset_minutes: i16, desired_state: PowerState) -> Result<Self, Error> {
         Self::sun(
             ScheduleTimeKind::Sunrise,
             offset_minutes,
             ScheduleFrequency::Once,
             0,
-            turn_on,
+            desired_state,
         )
     }
 
@@ -211,26 +227,30 @@ impl ScheduleRule {
     ///
     /// Returns `Err(Error::Validation)` if `offset_minutes` is outside
     /// ±1440 or `week_day` has bits 7+ set.
-    pub fn sunset_weekly(offset_minutes: i16, week_day: u8, turn_on: bool) -> Result<Self, Error> {
+    pub fn sunset_weekly(
+        offset_minutes: i16,
+        week_day: u8,
+        desired_state: PowerState,
+    ) -> Result<Self, Error> {
         Self::sun(
             ScheduleTimeKind::Sunset,
             offset_minutes,
             ScheduleFrequency::Weekly,
             week_day,
-            turn_on,
+            desired_state,
         )
     }
 
     /// Fires once at the next sunset plus `offset_minutes`.
     ///
     /// Returns `Err(Error::Validation)` if `offset_minutes` is outside ±1440.
-    pub fn sunset_once(offset_minutes: i16, turn_on: bool) -> Result<Self, Error> {
+    pub fn sunset_once(offset_minutes: i16, desired_state: PowerState) -> Result<Self, Error> {
         Self::sun(
             ScheduleTimeKind::Sunset,
             offset_minutes,
             ScheduleFrequency::Once,
             0,
-            turn_on,
+            desired_state,
         )
     }
 
@@ -267,6 +287,16 @@ fn validate_week_day(week_day: u8) -> Result<(), Error> {
     Ok(())
 }
 
+/// Strongly-typed `desired_states` payload, e.g. `{ "on": true }`.
+///
+/// `on` is optional because some firmwares emit an empty object and
+/// carry the firing state in `s_action` instead (see [`ScheduleRuleRaw`]).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct ScheduleDesiredStateRaw {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    on: Option<bool>,
+}
+
 /// Wire shape of a schedule rule, used internally for (de)serialization.
 /// Mirrors `ThingRuleSchedule` from the official Tapo Android app.
 ///
@@ -275,7 +305,7 @@ fn validate_week_day(week_day: u8) -> Result<(), Error> {
 /// determines whether `s_min` is a clock minute-of-day or `time_offset`
 /// is a sunrise / sunset offset.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct WireRule {
+struct ScheduleRuleRaw {
     #[serde(skip_serializing_if = "Option::is_none")]
     id: Option<String>,
     enable: bool,
@@ -291,7 +321,7 @@ struct WireRule {
     e_action: String,
     mode: String,
     #[serde(default)]
-    desired_states: serde_json::Value,
+    desired_states: ScheduleDesiredStateRaw,
     /// Deprecated mirror of the firing state, still emitted by some
     /// firmwares.  Used as a fallback when `desired_states.on` is
     /// absent.  See `ThingRuleSchedule.startAction` in the Tapo app.
@@ -302,7 +332,7 @@ struct WireRule {
 /// Constant placeholder for the wire `year` / `month` / `day` (device ignores these).
 const PLACEHOLDER_DATE: (i32, u8, u8) = (1970, 1, 1);
 
-impl From<ScheduleRule> for WireRule {
+impl From<ScheduleRule> for ScheduleRuleRaw {
     fn from(r: ScheduleRule) -> Self {
         let (s_type, time_offset, s_min) = match r.time_kind {
             ScheduleTimeKind::Clock => ("normal", 0_i32, i32::from(r.minute_of_day)),
@@ -314,7 +344,7 @@ impl From<ScheduleRule> for WireRule {
             ScheduleFrequency::Weekly => ("repeat", r.week_day),
         };
         let (year, month, day) = PLACEHOLDER_DATE;
-        WireRule {
+        ScheduleRuleRaw {
             id: r.id,
             enable: r.enable,
             year,
@@ -328,16 +358,18 @@ impl From<ScheduleRule> for WireRule {
             e_type: "normal".into(),
             e_action: "none".into(),
             mode: mode.into(),
-            desired_states: serde_json::json!({ "on": r.turn_on }),
+            desired_states: ScheduleDesiredStateRaw {
+                on: Some(r.desired_state == PowerState::On),
+            },
             s_action: None,
         }
     }
 }
 
-impl TryFrom<WireRule> for ScheduleRule {
+impl TryFrom<ScheduleRuleRaw> for ScheduleRule {
     type Error = String;
 
-    fn try_from(w: WireRule) -> Result<Self, Self::Error> {
+    fn try_from(w: ScheduleRuleRaw) -> Result<Self, Self::Error> {
         let time_kind = match w.s_type.as_str() {
             "normal" => ScheduleTimeKind::Clock,
             "sunrise" => ScheduleTimeKind::Sunrise,
@@ -349,10 +381,9 @@ impl TryFrom<WireRule> for ScheduleRule {
             "repeat" => ScheduleFrequency::Weekly,
             other => return Err(format!("unknown schedule mode {other:?}")),
         };
-        let turn_on = w
+        let on = w
             .desired_states
-            .get("on")
-            .and_then(|v| v.as_bool())
+            .on
             .or(match w.s_action.as_deref() {
                 Some("on") => Some(true),
                 Some("off") => Some(false),
@@ -378,7 +409,7 @@ impl TryFrom<WireRule> for ScheduleRule {
             offset_minutes,
             frequency,
             week_day: w.week_day,
-            turn_on,
+            desired_state: if on { PowerState::On } else { PowerState::Off },
         })
     }
 }
@@ -388,38 +419,59 @@ impl TryFrom<WireRule> for ScheduleRule {
 impl ScheduleRule {
     #[staticmethod]
     #[pyo3(name = "clock_weekly")]
-    fn py_clock_weekly(hour: u8, minute: u8, week_day: u8, turn_on: bool) -> PyResult<Self> {
-        Ok(Self::clock_weekly(hour, minute, week_day, turn_on)?)
+    fn py_clock_weekly(
+        hour: u8,
+        minute: u8,
+        week_day: u8,
+        desired_state: PowerState,
+    ) -> PyResult<Self> {
+        Ok(Self::clock_weekly(hour, minute, week_day, desired_state)?)
     }
 
     #[staticmethod]
     #[pyo3(name = "clock_once")]
-    fn py_clock_once(hour: u8, minute: u8, turn_on: bool) -> PyResult<Self> {
-        Ok(Self::clock_once(hour, minute, turn_on)?)
+    fn py_clock_once(hour: u8, minute: u8, desired_state: PowerState) -> PyResult<Self> {
+        Ok(Self::clock_once(hour, minute, desired_state)?)
     }
 
     #[staticmethod]
     #[pyo3(name = "sunrise_weekly")]
-    fn py_sunrise_weekly(offset_minutes: i16, week_day: u8, turn_on: bool) -> PyResult<Self> {
-        Ok(Self::sunrise_weekly(offset_minutes, week_day, turn_on)?)
+    fn py_sunrise_weekly(
+        offset_minutes: i16,
+        week_day: u8,
+        desired_state: PowerState,
+    ) -> PyResult<Self> {
+        Ok(Self::sunrise_weekly(
+            offset_minutes,
+            week_day,
+            desired_state,
+        )?)
     }
 
     #[staticmethod]
     #[pyo3(name = "sunrise_once")]
-    fn py_sunrise_once(offset_minutes: i16, turn_on: bool) -> PyResult<Self> {
-        Ok(Self::sunrise_once(offset_minutes, turn_on)?)
+    fn py_sunrise_once(offset_minutes: i16, desired_state: PowerState) -> PyResult<Self> {
+        Ok(Self::sunrise_once(offset_minutes, desired_state)?)
     }
 
     #[staticmethod]
     #[pyo3(name = "sunset_weekly")]
-    fn py_sunset_weekly(offset_minutes: i16, week_day: u8, turn_on: bool) -> PyResult<Self> {
-        Ok(Self::sunset_weekly(offset_minutes, week_day, turn_on)?)
+    fn py_sunset_weekly(
+        offset_minutes: i16,
+        week_day: u8,
+        desired_state: PowerState,
+    ) -> PyResult<Self> {
+        Ok(Self::sunset_weekly(
+            offset_minutes,
+            week_day,
+            desired_state,
+        )?)
     }
 
     #[staticmethod]
     #[pyo3(name = "sunset_once")]
-    fn py_sunset_once(offset_minutes: i16, turn_on: bool) -> PyResult<Self> {
-        Ok(Self::sunset_once(offset_minutes, turn_on)?)
+    fn py_sunset_once(offset_minutes: i16, desired_state: PowerState) -> PyResult<Self> {
+        Ok(Self::sunset_once(offset_minutes, desired_state)?)
     }
 
     #[pyo3(name = "with_enable")]
@@ -450,7 +502,7 @@ impl ScheduleRule {
 
 /// User-facing dict shape for `ScheduleRule::to_dict`. Matches the
 /// public fields of [`ScheduleRule`] (and the `get_all` attributes
-/// exposed to Python) instead of the on-the-wire [`WireRule`].
+/// exposed to Python) instead of the on-the-wire [`ScheduleRuleRaw`].
 #[cfg(feature = "python")]
 #[derive(Serialize)]
 struct DictRule<'a> {
@@ -461,7 +513,7 @@ struct DictRule<'a> {
     offset_minutes: i16,
     frequency: ScheduleFrequency,
     week_day: u8,
-    turn_on: bool,
+    desired_state: PowerState,
 }
 
 #[cfg(feature = "python")]
@@ -475,7 +527,7 @@ impl<'a> From<&'a ScheduleRule> for DictRule<'a> {
             offset_minutes: r.offset_minutes,
             frequency: r.frequency,
             week_day: r.week_day,
-            turn_on: r.turn_on,
+            desired_state: r.desired_state,
         }
     }
 }
@@ -523,17 +575,18 @@ mod tests {
         serde_json::to_value(rule).expect("serialize")
     }
 
-    fn clock_once(hour: u8, minute: u8, turn_on: bool) -> ScheduleRule {
-        ScheduleRule::clock_once(hour, minute, turn_on).expect("valid clock_once")
+    fn clock_once(hour: u8, minute: u8, desired_state: PowerState) -> ScheduleRule {
+        ScheduleRule::clock_once(hour, minute, desired_state).expect("valid clock_once")
     }
 
-    fn clock_weekly(hour: u8, minute: u8, week_day: u8, turn_on: bool) -> ScheduleRule {
-        ScheduleRule::clock_weekly(hour, minute, week_day, turn_on).expect("valid clock_weekly")
+    fn clock_weekly(hour: u8, minute: u8, week_day: u8, desired_state: PowerState) -> ScheduleRule {
+        ScheduleRule::clock_weekly(hour, minute, week_day, desired_state)
+            .expect("valid clock_weekly")
     }
 
     #[test]
     fn clock_once_wire_shape() {
-        let r = clock_once(6, 30, true);
+        let r = clock_once(6, 30, PowerState::On);
         let j = wire_json(&r);
         assert_eq!(j["s_type"], "normal");
         assert_eq!(j["mode"], "once");
@@ -542,7 +595,7 @@ mod tests {
         assert_eq!(j["week_day"], 0);
         assert_eq!(j["enable"], true);
         assert_eq!(j["desired_states"], serde_json::json!({ "on": true }));
-        // Date placeholder is constant per the WireRule contract.
+        // Date placeholder is constant per the ScheduleRuleRaw contract.
         assert_eq!(j["year"], 1970);
         assert_eq!(j["month"], 1);
         assert_eq!(j["day"], 1);
@@ -552,7 +605,7 @@ mod tests {
 
     #[test]
     fn clock_weekly_wire_shape() {
-        let r = clock_weekly(23, 30, week_day::WEEKDAYS, false);
+        let r = clock_weekly(23, 30, week_day::WEEKDAYS, PowerState::Off);
         let j = wire_json(&r);
         assert_eq!(j["s_type"], "normal");
         assert_eq!(j["mode"], "repeat");
@@ -563,7 +616,7 @@ mod tests {
 
     #[test]
     fn sunrise_weekly_wire_shape() {
-        let r = ScheduleRule::sunrise_weekly(-63, week_day::MON | week_day::WED, true)
+        let r = ScheduleRule::sunrise_weekly(-63, week_day::MON | week_day::WED, PowerState::On)
             .expect("valid sunrise_weekly");
         let j = wire_json(&r);
         assert_eq!(j["s_type"], "sunrise");
@@ -575,7 +628,7 @@ mod tests {
 
     #[test]
     fn sunset_once_wire_shape() {
-        let r = ScheduleRule::sunset_once(0, false).expect("valid sunset_once");
+        let r = ScheduleRule::sunset_once(0, PowerState::Off).expect("valid sunset_once");
         let j = wire_json(&r);
         assert_eq!(j["s_type"], "sunset");
         assert_eq!(j["mode"], "once");
@@ -586,13 +639,14 @@ mod tests {
     #[test]
     fn round_trip_via_wire() {
         for original in [
-            clock_once(6, 30, true),
-            clock_weekly(23, 30, week_day::WEEKDAYS, false),
-            clock_weekly(0, 0, week_day::EVERY_DAY, true),
-            ScheduleRule::sunrise_weekly(-63, week_day::MON | week_day::WED, true).unwrap(),
-            ScheduleRule::sunrise_once(15, true).unwrap(),
-            ScheduleRule::sunset_weekly(7, week_day::EVERY_DAY, false).unwrap(),
-            ScheduleRule::sunset_once(0, false).unwrap(),
+            clock_once(6, 30, PowerState::On),
+            clock_weekly(23, 30, week_day::WEEKDAYS, PowerState::Off),
+            clock_weekly(0, 0, week_day::EVERY_DAY, PowerState::On),
+            ScheduleRule::sunrise_weekly(-63, week_day::MON | week_day::WED, PowerState::On)
+                .unwrap(),
+            ScheduleRule::sunrise_once(15, PowerState::On).unwrap(),
+            ScheduleRule::sunset_weekly(7, week_day::EVERY_DAY, PowerState::Off).unwrap(),
+            ScheduleRule::sunset_once(0, PowerState::Off).unwrap(),
         ] {
             let wire = serde_json::to_value(&original).expect("serialize");
             let back: ScheduleRule = serde_json::from_value(wire).expect("deserialize");
@@ -602,7 +656,7 @@ mod tests {
 
     #[test]
     fn round_trip_preserves_device_id() {
-        let original = clock_weekly(8, 0, week_day::MON, true).with_id("S42");
+        let original = clock_weekly(8, 0, week_day::MON, PowerState::On).with_id("S42");
         let wire = serde_json::to_value(&original).expect("serialize");
         assert_eq!(wire["id"], "S42");
         let back: ScheduleRule = serde_json::from_value(wire).expect("deserialize");
@@ -612,7 +666,7 @@ mod tests {
 
     #[test]
     fn with_enable_clones_and_overrides() {
-        let r = clock_weekly(8, 0, week_day::MON, true).with_id("S42");
+        let r = clock_weekly(8, 0, week_day::MON, PowerState::On).with_id("S42");
         let disabled = r.with_enable(false);
         assert!(!disabled.enable);
         assert!(r.enable); // original unchanged
@@ -622,7 +676,7 @@ mod tests {
 
     #[test]
     fn deserialize_rejects_bad_s_min() {
-        let mut wire = serde_json::to_value(clock_once(6, 30, true)).unwrap();
+        let mut wire = serde_json::to_value(clock_once(6, 30, PowerState::On)).unwrap();
         wire["s_min"] = serde_json::json!(-1);
         let err: Result<ScheduleRule, _> = serde_json::from_value(wire);
         assert!(err.is_err());
@@ -630,7 +684,7 @@ mod tests {
 
     #[test]
     fn deserialize_rejects_unknown_s_type() {
-        let mut wire = serde_json::to_value(clock_once(6, 30, true)).unwrap();
+        let mut wire = serde_json::to_value(clock_once(6, 30, PowerState::On)).unwrap();
         wire["s_type"] = serde_json::json!("eclipse");
         let err: Result<ScheduleRule, _> = serde_json::from_value(wire);
         assert!(err.is_err());
@@ -638,7 +692,7 @@ mod tests {
 
     #[test]
     fn clock_weekly_rejects_bad_hour() {
-        let err = ScheduleRule::clock_weekly(25, 0, week_day::MON, true).unwrap_err();
+        let err = ScheduleRule::clock_weekly(25, 0, week_day::MON, PowerState::On).unwrap_err();
         assert!(
             matches!(&err, Error::Validation { field, message }
                 if field == "hour" && message.contains("0..=23")),
@@ -648,7 +702,7 @@ mod tests {
 
     #[test]
     fn clock_weekly_rejects_bad_minute() {
-        let err = ScheduleRule::clock_weekly(8, 99, week_day::MON, true).unwrap_err();
+        let err = ScheduleRule::clock_weekly(8, 99, week_day::MON, PowerState::On).unwrap_err();
         assert!(
             matches!(&err, Error::Validation { field, message }
                 if field == "minute" && message.contains("0..=59")),
@@ -658,7 +712,7 @@ mod tests {
 
     #[test]
     fn clock_weekly_rejects_high_week_day_bits() {
-        let err = ScheduleRule::clock_weekly(8, 0, 0b1000_0000, true).unwrap_err();
+        let err = ScheduleRule::clock_weekly(8, 0, 0b1000_0000, PowerState::On).unwrap_err();
         assert!(
             matches!(&err, Error::Validation { field, message }
                 if field == "week_day" && message.contains("bits 0..=6")),
@@ -668,7 +722,7 @@ mod tests {
 
     #[test]
     fn sunrise_rejects_huge_offset() {
-        let err = ScheduleRule::sunrise_once(1500, true).unwrap_err();
+        let err = ScheduleRule::sunrise_once(1500, PowerState::On).unwrap_err();
         assert!(
             matches!(&err, Error::Validation { field, message }
                 if field == "offset_minutes" && message.contains("-1440..=1440")),
@@ -680,28 +734,28 @@ mod tests {
     fn deserialize_falls_back_to_s_action_when_desired_states_absent() {
         // Simulate a legacy / minimal firmware that only emits `s_action`
         // and an empty `desired_states`.
-        let mut wire = serde_json::to_value(clock_once(6, 30, true)).unwrap();
+        let mut wire = serde_json::to_value(clock_once(6, 30, PowerState::On)).unwrap();
         wire["desired_states"] = serde_json::json!({});
         wire["s_action"] = serde_json::json!("off");
         let parsed: ScheduleRule = serde_json::from_value(wire).expect("fallback to s_action");
-        assert!(!parsed.turn_on);
+        assert_eq!(parsed.desired_state, PowerState::Off);
     }
 
     #[test]
     fn deserialize_prefers_desired_states_over_s_action() {
         // Both fields present and disagree — desired_states wins.
-        let mut wire = serde_json::to_value(clock_once(6, 30, true)).unwrap();
+        let mut wire = serde_json::to_value(clock_once(6, 30, PowerState::On)).unwrap();
         wire["s_action"] = serde_json::json!("off");
         let parsed: ScheduleRule = serde_json::from_value(wire).expect("desired_states wins");
-        assert!(parsed.turn_on);
+        assert_eq!(parsed.desired_state, PowerState::On);
     }
 
     #[cfg(feature = "python")]
     #[test]
     fn to_dict_shape_matches_user_facing_fields() {
         // The dict surface must mirror the public/get_all fields,
-        // not the on-the-wire WireRule. See module-level docs.
-        let rule = ScheduleRule::sunset_weekly(-15, week_day::WEEKDAYS, true)
+        // not the on-the-wire ScheduleRuleRaw. See module-level docs.
+        let rule = ScheduleRule::sunset_weekly(-15, week_day::WEEKDAYS, PowerState::On)
             .unwrap()
             .with_id("S42");
         let dict = serde_json::to_value(DictRule::from(&rule)).unwrap();
@@ -711,13 +765,13 @@ mod tests {
         assert_eq!(
             keys,
             vec![
+                "desired_state",
                 "enable",
                 "frequency",
                 "id",
                 "minute_of_day",
                 "offset_minutes",
                 "time_kind",
-                "turn_on",
                 "week_day",
             ],
         );
@@ -727,7 +781,7 @@ mod tests {
         assert_eq!(dict["frequency"], "weekly");
         assert_eq!(dict["offset_minutes"], -15);
         assert_eq!(dict["week_day"], week_day::WEEKDAYS);
-        assert_eq!(dict["turn_on"], true);
+        assert_eq!(dict["desired_state"], "on");
         // No wire-only fields leak through.
         assert!(!obj.contains_key("s_type"));
         assert!(!obj.contains_key("s_min"));
@@ -736,7 +790,7 @@ mod tests {
 
     #[test]
     fn deserialize_rejects_missing_firing_state() {
-        let mut wire = serde_json::to_value(clock_once(6, 30, true)).unwrap();
+        let mut wire = serde_json::to_value(clock_once(6, 30, PowerState::On)).unwrap();
         wire["desired_states"] = serde_json::json!({});
         // No s_action either.
         let err: Result<ScheduleRule, _> = serde_json::from_value(wire);

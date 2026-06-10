@@ -13,6 +13,7 @@ use std::env;
 use log::info;
 use tapo::ApiClient;
 use tapo::requests::{ScheduleRule, week_day};
+use tapo::responses::PowerState;
 
 mod common;
 
@@ -43,7 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let added = [
         // Turn on once, the next time the clock hits 06:30.
         device
-            .add_schedule_rule(ScheduleRule::clock_once(6, 30, true)?)
+            .add_schedule_rule(ScheduleRule::clock_once(6, 30, PowerState::On)?)
             .await?,
         // Turn off weekly at 23:30 on Mondays and Wednesdays.
         device
@@ -51,19 +52,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 23,
                 30,
                 week_day::MON | week_day::WED,
-                false,
+                PowerState::Off,
             )?)
             .await?,
         // Turn on every day, one hour after sunset.
         device
-            .add_schedule_rule(ScheduleRule::sunset_weekly(60, week_day::EVERY_DAY, true)?)
+            .add_schedule_rule(ScheduleRule::sunset_weekly(
+                60,
+                week_day::EVERY_DAY,
+                PowerState::On,
+            )?)
             .await?,
         // Turn off on weekdays (Mon–Fri), 30 minutes before sunrise.
         device
             .add_schedule_rule(ScheduleRule::sunrise_weekly(
                 -30,
                 week_day::WEEKDAYS,
-                false,
+                PowerState::Off,
             )?)
             .await?,
     ];
@@ -79,13 +84,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("sunset rule we just added must come back");
     info!(
         "Read back sunset rule: id={:?} time_kind={:?} freq={:?} \
-         offset_minutes={} week_day={:#09b} turn_on={}",
+         offset_minutes={} week_day={:#09b} desired_state={:?}",
         sunset.id,
         sunset.time_kind,
         sunset.frequency,
         sunset.offset_minutes,
         sunset.week_day,
-        sunset.turn_on,
+        sunset.desired_state,
     );
 
     info!("Cleaning up: removing the four demo rules.");

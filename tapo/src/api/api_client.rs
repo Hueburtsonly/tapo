@@ -25,7 +25,7 @@ use crate::responses::{
 use crate::responses::{
     AddTimerResult, ControlChildResult, CurrentPowerResult, DecodableResultExt, EnergyDataResult,
     EnergyDataResultRaw, EnergyUsageResult, PowerDataResult, PowerDataResultRaw, PowerState,
-    ScheduleRuleAddResult, ScheduleRuleListResult, TapoMultipleResponse, TapoResponseExt,
+    ScheduleRuleAddResult, ScheduleRuleListResultRaw, TapoMultipleResponse, TapoResponseExt,
     TapoResult, Timer, TimerListResultRaw, validate_response,
 };
 
@@ -1328,7 +1328,7 @@ impl ApiClient {
             }));
             let page = self
                 .protocol()?
-                .execute_request::<ScheduleRuleListResult>(request)
+                .execute_request::<ScheduleRuleListResultRaw>(request)
                 .await?
                 .ok_or_else(|| Error::Tapo(TapoResponseError::EmptyResult))?;
             let returned = page.rule_list.len() as u32;

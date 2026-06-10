@@ -1,6 +1,7 @@
 from enum import Enum
 from typing import Optional
 
+from tapo.responses import PowerState
 from tapo.to_dict_ext import ToDictExt
 
 # Day-of-week bitmask constants (bit 0 = Sun, bit 6 = Sat). Combine
@@ -65,31 +66,37 @@ class ScheduleRule(ToDictExt):
     frequency: ScheduleFrequency
     week_day: int
     """Bitmask of days the rule fires on, when ``frequency == Weekly``."""
-    turn_on: bool
-    """When the rule fires, turn the plug on (``True``) or off (``False``)."""
+    desired_state: PowerState
+    """The state the plug transitions to when the rule fires."""
 
     @staticmethod
-    def clock_weekly(hour: int, minute: int, week_day: int, turn_on: bool) -> "ScheduleRule":
+    def clock_weekly(
+        hour: int, minute: int, week_day: int, desired_state: PowerState
+    ) -> "ScheduleRule":
         """Fires every day matched by ``week_day`` at ``hour:minute``."""
 
     @staticmethod
-    def clock_once(hour: int, minute: int, turn_on: bool) -> "ScheduleRule":
+    def clock_once(hour: int, minute: int, desired_state: PowerState) -> "ScheduleRule":
         """Fires once, the next time the device's clock reaches ``hour:minute``."""
 
     @staticmethod
-    def sunrise_weekly(offset_minutes: int, week_day: int, turn_on: bool) -> "ScheduleRule":
+    def sunrise_weekly(
+        offset_minutes: int, week_day: int, desired_state: PowerState
+    ) -> "ScheduleRule":
         """Fires every day matched by ``week_day`` at ``offset_minutes`` from sunrise."""
 
     @staticmethod
-    def sunrise_once(offset_minutes: int, turn_on: bool) -> "ScheduleRule":
+    def sunrise_once(offset_minutes: int, desired_state: PowerState) -> "ScheduleRule":
         """Fires once at the next sunrise plus ``offset_minutes``."""
 
     @staticmethod
-    def sunset_weekly(offset_minutes: int, week_day: int, turn_on: bool) -> "ScheduleRule":
+    def sunset_weekly(
+        offset_minutes: int, week_day: int, desired_state: PowerState
+    ) -> "ScheduleRule":
         """Fires every day matched by ``week_day`` at ``offset_minutes`` from sunset."""
 
     @staticmethod
-    def sunset_once(offset_minutes: int, turn_on: bool) -> "ScheduleRule":
+    def sunset_once(offset_minutes: int, desired_state: PowerState) -> "ScheduleRule":
         """Fires once at the next sunset plus ``offset_minutes``."""
 
     def with_enable(self, enable: bool) -> "ScheduleRule":
